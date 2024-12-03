@@ -1,7 +1,7 @@
-<!-- Including image as context -->
+<!-- Working for image context consideration -->
+
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
-
 
     // User input and API response states
     let input_value = '';
@@ -49,25 +49,24 @@
     }
 
     // Helper function to convert Blob to Base64 Data URL
-    function blobToDataURL(blob: Blob): Promise<string> {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                resolve(reader.result as string);
-            };
-            reader.onerror = () => {
-                reject(new Error('Failed to convert blob to data URL.'));
-            };
-            reader.readAsDataURL(blob);
-        });
-    }
+function blobToDataURL(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            resolve(reader.result as string);
+        };
+        reader.onerror = () => {
+            reject(new Error('Failed to convert blob to data URL.'));
+        };
+        reader.readAsDataURL(blob);
+    });
+}
 
-    // Image context for conversation
-    let currentImageUrl: string | null = null;
 
     // Access the GPT API key from env variables
     const GPT_API_KEY = import.meta.env.VITE_GPT_API_KEY;
     // Chatbot states
+    let currentImageUrl = '';
     let chatInput = '';
     let isChatLoading = false;
     let chatError = '';
@@ -138,9 +137,6 @@
 
             // Add the actual description to the chat
             chatMessagesChat = [...chatMessagesChat, { user: false, text: botResponse }];
-        
-            // Update most recent image URL
-            // currentImageUrl = dataUrl;
             currentImageUrl = dataUrl;
         } catch (error) {
             // Replace "Analyzing image..." with an error message
@@ -437,10 +433,34 @@
                 content: message.text
             }));
     }
-
-
+    
     // Function to handle sending a message
     async function sendChatMessage() {
+
+
+        console.log('Chat Messages Chat before mapping:', chatMessagesChat);
+
+/*
+Chat Messages Chat before mapping: 
+Array [ {…}, {…} ]
+​
+0: Object { user: false, text: "The image depicts a detailed illustration of a rooster with vibrant plumage. The rooster has a red comb and wattles, and its feathers are a mix of rich colors including orange, white, and deep blue-green. The tail feathers are notably long and flowing. The background is a textured, aged paper-like surface, adding a vintage or rustic feel to the image." }
+​
+1: Object { user: false, text: undefined }
+​​
+text: undefined
+​​
+user: false
+​​
+<prototype>: Object { … }
+​
+length: 2
+​
+<prototype>: Array [] 
+
+ */
+        chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
+        
         if (chatInput.trim() === '') return;
 
         // Add user message to chat
@@ -455,6 +475,8 @@
         // Add a temporary "Typing..." message
         chatMessagesChat = [...chatMessagesChat, { user: false, text: "Typing..." }];
 
+        if (!currentImageUrl){return;}
+        else{
         try {
             // Map the conversation history to OpenAI's message format
             const mappedMessages = mapChatMessagesToOpenAI(chatMessagesChat);
@@ -465,21 +487,35 @@
                 ...mappedMessages
             ];
 
-            // If there's a current image, include it in the messages as context
-            // if (currentImageUrl) {
-            //     messages.push({
-            //         role: 'user',
-            //         content: [
-            //             { type: "text", text: "Here is an image for context:" },
-            //             {
-            //                 type: "image_url",
-            //                 image_url: {
-            //                     url: currentImageUrl
-            //                 }
-            //             }
-            //         ]
-            //     });
-            // }
+            console.log('Messages being sent to OpenAI API:', messages);
+
+            /*
+Messages being sent to OpenAI API: 
+Array(4) [ {…}, {…}, {…}, {…} ]
+​
+0: Object { role: "system", content: "You are a helpful assistant." }
+​
+1: Object { role: "assistant", content: "The image depicts a detailed illustration of a rooster with vibrant plumage. The rooster has a red comb and wattles, and its feathers are a mix of rich colors including orange, white, and deep blue-green. The tail feathers are notably long and flowing. The background is a textured, aged paper-like surface, adding a vintage or rustic feel to the image." }
+​
+2: Object { role: "assistant", content: undefined }
+​
+3: Object { role: "user", content: "foo" }
+​
+length: 4 
+            
+             */
+            
+            const userMessage = [
+                { type: "text", text: "Please describe the contents of this image." },
+                {
+                    type: "image_url",
+                    image_url: {
+                        url: currentImageUrl
+                    }
+                }];
+
+                console.log('User Message being sent:', userMessage);
+
 
             const response = await fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
@@ -489,13 +525,19 @@
                 },
                 body: JSON.stringify({
                     model: 'gpt-4o', // Corrected model name
-                    messages: messages,
+                    messages: [...messages, 
+                        {role: 'system', content: 'Here is an image for context: '},
+                        {role: 'user', content: userMessage}
+                    ],
                     temperature: 0.7, // Adjust as needed
                     max_tokens: 150, // Adjust as needed
                     n: 1
                     // Removed the 'stop' parameter
                 })
             });
+
+            console.log('API Response:', response);
+
 
             if (!response.ok) {
                 const errorData = await response.json();
@@ -519,9 +561,7 @@
         } finally {
             isChatLoading = false;
         }
-    }
-
-
+    }}
 
 </script>
 
@@ -1033,5 +1073,4 @@
             </button>
         </div>
     </div>
-
 </div>
