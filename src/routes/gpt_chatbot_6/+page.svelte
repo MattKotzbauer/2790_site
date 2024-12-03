@@ -1,4 +1,4 @@
-<!-- Improving Formatting -->
+<!-- attempt at blob conversion -->
 
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
@@ -46,6 +46,103 @@
             reader.onerror = reject;
             reader.readAsDataURL(blob);
         });
+    }
+
+    // Helper function to convert Blob to Base64 Data URL
+function blobToDataURL(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            resolve(reader.result as string);
+        };
+        reader.onerror = () => {
+            reject(new Error('Failed to convert blob to data URL.'));
+        };
+        reader.readAsDataURL(blob);
+    });
+}
+
+
+    // Access the GPT API key from env variables
+    const GPT_API_KEY = import.meta.env.VITE_GPT_API_KEY;
+    // Chatbot states
+    let chatInput = '';
+    let isChatLoading = false;
+    let chatError = '';
+    let chatMessagesChat: { user: boolean; text: string }[] = [];
+
+    // Add message to chat interface
+    function addBotMessage(message: string) {
+    chatMessagesChat = [...chatMessagesChat, { user: false, text: message }];
+    }
+
+    // Function to fetch image description from OpenAI GPT
+    async function fetchImageDescription(imageUrl: string) {
+        // Add a temporary "Analyzing image..." message
+        chatMessagesChat = [...chatMessagesChat, { user: false, text: "Analyzing image..." }];
+
+        try {
+            // Fetch the image blob from the object URL
+            const response = await fetch(imageUrl);
+            if (!response.ok) {
+                throw new Error('Failed to fetch the image blob.');
+            }
+            const blob = await response.blob();
+
+            // Convert the blob to a base64 data URL
+            const dataUrl = await blobToDataURL(blob);
+
+            // Define the user message with both text and image_url
+            const userMessage = [
+                { type: "text", text: "Please describe the contents of this image." },
+                {
+                    type: "image_url",
+                    image_url: {
+                        url: dataUrl
+                    }
+                }
+            ];
+
+            // Send the message to OpenAI GPT API
+            const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${GPT_API_KEY}` // Ensure GPT_API_KEY is securely handled
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o', // Use the correct model
+                    messages: [
+                        { role: 'system', content: 'You are a helpful assistant.' },
+                        { role: 'user', content: userMessage }
+                    ],
+                    temperature: 0.7, // Adjust as needed
+                    max_tokens: 200, // Adjust as needed
+                    n: 1
+                    // stop: null
+                })
+            });
+
+            if (!gptResponse.ok) {
+                const errorData = await gptResponse.json();
+                throw new Error(errorData.error.message || 'Failed to fetch description from OpenAI');
+            }
+
+            const data = await gptResponse.json();
+            const botResponse = data.choices[0].message.content.trim();
+
+            // Remove the "Analyzing image..." message
+            chatMessagesChat.pop();
+
+            // Add the actual description to the chat
+            chatMessagesChat = [...chatMessagesChat, { user: false, text: botResponse }];
+        } catch (error) {
+            // Replace "Analyzing image..." with an error message
+            chatMessagesChat.pop();
+            chatMessagesChat = [...chatMessagesChat, { user: false, text: "Sorry, I couldn't analyze the image." }];
+            console.error('GPT API Error:', error);
+            chatError = error instanceof Error ? error.message : 'An unknown error occurred.';
+        }
     }
 
     // Fetch image from Stability API based on user prompt and optional control image
@@ -115,6 +212,10 @@
 
             // Add to history
             history = [...history, api_response];
+
+            const description = await fetchImageDescription(imageUrl);
+            addBotMessage(description);
+
         } catch (err) {
             if (err instanceof Error) {
                 error = err.message;
@@ -321,17 +422,6 @@
         };
     });
 
-    // Chatbot Integration
-
-    // Chatbot states
-    let chatInput = '';
-    let chatMessagesChat: { user: boolean; text: string }[] = [];
-    let isChatLoading = false;
-    let chatError = '';
-
-    // Access the GPT API key from environment variables
-    const GPT_API_KEY = import.meta.env.VITE_GPT_API_KEY;
-
     // Function to handle sending a message
     async function sendChatMessage() {
         if (chatInput.trim() === '') return;
@@ -356,7 +446,7 @@
                     'Authorization': `Bearer ${GPT_API_KEY}`
                 },
                 body: JSON.stringify({
-                    model: 'gpt-4', // You can change this to 'gpt-3.5-turbo' if preferred
+                    model: 'gpt-4o', 
                     messages: [
                         { role: 'system', content: 'You are a helpful assistant.' },
                         { role: 'user', content: userMessage }
@@ -392,29 +482,61 @@
         }
     }
 </script>
+
 <style>
     :root {
-        /* Universal Colors */
-        --box-background-color: #f1f1f1;
-        --button-background-color: #4A90E2;
-        --button-hover-color: #357ABD;
-        --button-disabled-color: #a0c4e3;
-        --undo-button-color: #FF5733;
-        --undo-button-hover-color: #e04e2a;
-        --text-color: #333;
-        --secondary-text-color: #555;
-        --error-color: #E74C3C;
-
-        /* Universal Fonts */
-        --font-family: 'Arial', sans-serif;
-        --title-font-size: 1.5rem;
+        /* Dark Mode Colors */
+        --bg-color: #1e1e1e;
+        --text-color: #f5f5f5;
+        --secondary-text-color: #cccccc;
+        --error-color: #ff6b6b;
+        --button-bg-color: #3a3a3a;
+        --button-hover-color: #575757;
+        --button-disabled-color: #2a2a2a;
+        --undo-button-color: #c0392b;
+        --undo-button-hover-color: #96281b;
+        --bot-bg-color: #2c3e50;
+        --user-bg-color: #2980b9;
+        --input-bg-color: #2c3e50;
+    
+        --font-family: 'arial', sans-serif;
+        --title-font-size: 2rem;
         --message-font-size: 1rem;
     }
 
+    /* Light Mode Overrides */
+    /* [data-theme="light"] {
+        --bg-color: #f1f1f1;
+        --text-color: #333;
+        --secondary-text-color: #555;
+        --error-color: #E74C3C;
+        --button-bg-color: #4A90E2;
+        --button-hover-color: #357ABD;
+        --button-disabled-color: #a0c4e3;
+        --undo-button-co    lor: #FF5733;
+        --undo-button-hover-color: #e04e2a;
+        --bot-bg-color: #e0e0e0;
+        --user-bg-color: #4A90E2;
+        --input-bg-color: #ffffff;
+    } */
+
     /* Apply universal font family */
-    body {
+    /* body {
         font-family: var(--font-family);
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        transition: background-color 0.3s, color 0.3s;
+    } */
+    :global(html) {
+        font-family: var(--font-family);
+        background-color: #241d1dd1;
+        color: var(--text-color);
+        transition: background-color 0.3s, color 0.3s;
+        margin: 0; /* Remove default margin */
+        padding: 0; /* Remove default padding */
+        min-height: 100vh; /* Ensure body covers full viewport height */
     }
+
 
     /* Parent container to hold both the image interaction and chatbot panes */
     .parent-container {
@@ -428,7 +550,7 @@
 
     /* Shared Box Styling */
     .box {
-        background-color: var(--box-background-color);
+        background-color: var(--bg-color);
         padding: 20px;
         border-radius: 10px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -436,6 +558,7 @@
         max-width: 800px;
         min-width: 250px;
         height: fit-content;
+        transition: background-color 0.3s;
     }
 
     /* Remove individual container and chatbot-pane styles and use the shared .box class */
@@ -454,12 +577,6 @@
         text-align: center;
         margin-bottom: 30px;
     }
-
-    /* h2 {
-        font-size: var(--title-font-size);
-        text-align: center;
-        margin-bottom: 20px;
-    } */
 
     h3 {
         font-size: 1.25rem;
@@ -497,12 +614,12 @@
     }
 
     .chat-message.user p {
-        background-color: #4A90E2;
+        background-color: var(--user-bg-color);
         color: white;
     }
 
     .chat-message.bot p {
-        background-color: #e0e0e0;
+        background-color: var(--bot-bg-color);
         color: var(--text-color);
     }
 
@@ -520,16 +637,18 @@
         font-size: var(--message-font-size);
         transition: border-color 0.3s;
         font-family: var(--font-family);
+        background-color: var(--input-bg-color);
+        color: var(--text-color);
     }
 
     input[type="text"]:focus, input[type="file"]:focus, .chat-input input[type="text"]:focus {
-        border-color: #4A90E2;
+        border-color: var(--button-bg-color);
         outline: none;
     }
 
     button {
         padding: 12px 20px;
-        background-color: var(--button-background-color);
+        background-color: var(--button-bg-color);
         color: white;
         border: none;
         border-radius: 20px; /* Uniform button shape */
@@ -551,7 +670,7 @@
     /* Specific Button Styling for Undo */
     .undo-button {
         background-color: var(--undo-button-color);
-        border-radius: 5px; /* Slightly different shape if desired */
+        border-radius: 20px; /* Uniform shape */
         font-size: 0.875rem;
         padding: 6px 12px;
     }
@@ -662,13 +781,15 @@
     }
 
     .prompt-section {
+        /* color:black; */
         display: flex;
         flex-direction: column;
     }
 
     .prompt-section .prompt {
         font-size: 1rem;
-        color: var(--text-color);
+        /* color: var(--text-color); */
+        color: black;
         margin: 0;
         font-family: var(--font-family);
     }
@@ -729,10 +850,12 @@
     }
 </style>
 
+
+
 <div class="parent-container">
     <!-- Existing Image Interaction Container -->
     <div class="container box">
-        <h1>Image Pane</h1>
+        <h1>Generate Image</h1>
 
         <!-- Input field, image upload, and generate button -->
         <div class="input-group">
@@ -843,7 +966,7 @@
 
     <!-- Chatbot Pane -->
     <div class="chatbot-pane box">
-        <h2>Chat Pane</h2>
+        <h2>Chat</h2>
         <div class="chat-messages">
             {#each chatMessagesChat as message}
                 <div class="chat-message {message.user ? 'user' : 'bot'}">

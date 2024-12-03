@@ -6,7 +6,7 @@
 
 <style>
     .response {
-        background-color: #f1f1f1;
+        background-color: #1e1e1e;
         padding: 1rem;
         border-radius: 5px;
         margin-top: 1rem;

@@ -1,3 +1,5 @@
+<!-- Ctrl-Z to activate undo -->
+
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
 
