@@ -79,6 +79,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
 
     // Function to fetch image description from OpenAI GPT
     async function fetchImageDescription(imageUrl: string) {
+
         // Add a temporary "Analyzing image..." message
         chatMessagesChat = [...chatMessagesChat, { user: false, text: "Analyzing image..." }];
 
@@ -147,21 +148,89 @@ function blobToDataURL(blob: Blob): Promise<string> {
         }
     }
 
+    async function prepareImageMessage(userInput: string): Promise<string> {
+        if (userInput === '' || chatInput === ''){return userInput;}
+        chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
+        const mappedMessages = mapChatMessagesToOpenAI(chatMessagesChat);
+
+        const messages = [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            ...mappedMessages,
+            { 
+                role: 'user', 
+                content: `Based on the current conversation, generate an optimized image generation prompt for the following user input: "${userInput}"` 
+            }
+        ];
+
+        const imageMessage = [
+                    {
+                        type: "image_url",
+                        image_url: {
+                            url: currentImageUrl
+                        }
+                    }];
+
+        try {
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${GPT_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o', // Corrected model name
+                    messages: [...messages, {role: 'user', content: imageMessage}],
+                    temperature: 0.7,
+                    max_tokens: 150,
+                    n: 1
+                })
+            });
+
+            console.log("GPT response status:", response.status);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("GPT API Error Response:", errorData);
+                throw new Error(errorData.error.message || 'Failed to generate optimized prompt from OpenAI');
+            }
+
+            const data = await response.json();
+            console.log("GPT API Response Data:", data);
+
+            if (!data.choices || !data.choices[0]?.message?.content) {
+                console.error("Unexpected response structure from OpenAI:", data);
+                throw new Error("Invalid response structure from OpenAI.");
+            }
+
+            const optimizedPrompt = data.choices[0].message.content.trim();
+            console.log("Optimized Prompt:", optimizedPrompt);
+
+            return optimizedPrompt;
+
+        } catch (error) {
+            console.error('Error in prepareImageMessage:', error);
+            throw error; // Re-throw to be handled by the caller
+        }
+}
+
     // Fetch image from Stability API based on user prompt and optional control image
     async function callStability() {
         if (!input_value.trim()) {
             alert("Please enter a prompt.");
             return;
         }
-
+        
         is_loading = true;
         error = '';
         api_response = null;
 
         try {
+
+            const optimizedPrompt = await prepareImageMessage(input_value);
+            console.log("current prompt: ", optimizedPrompt)
             // Prepare form data
             const formData = new FormData();
-            formData.append("prompt", input_value);
+            formData.append("prompt", optimizedPrompt);
             formData.append("height", '1024'); // Default height for style endpoint
             formData.append("width", '1024');  // Default width for style endpoint
 
@@ -235,6 +304,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
                 }
             }
         }
+        console.log("current global messages: ", chatMessagesChat)
     }
 
     // Handle image upload
@@ -1073,3 +1143,4 @@ function blobToDataURL(blob: Blob): Promise<string> {
         </div>
     </div>
 </div>
+
