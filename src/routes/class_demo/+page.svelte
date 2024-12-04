@@ -1,4 +1,4 @@
-<!-- Misc UI formatting (black brush, displaying optimized prompt) -->
+<!-- attempt at HSV brush -->
 
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
@@ -97,7 +97,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
 
             // Define the user message with both text and image_url
             const userMessage = [
-                { type: "text", text: "Please describe the contents of this image." },
+                { type: "text", text: "You are discussing this image with a painter, focusing on abstraction and creative context. Please summarize this image in a way that captures both the literal content of the image, alongside the sentiment evoked." },
                 {
                     type: "image_url",
                     image_url: {
@@ -154,6 +154,13 @@ function blobToDataURL(blob: Blob): Promise<string> {
 
     async function prepareImageMessage(userInput: string): Promise<{optimizedPrompt: string, endpoint: string}> {
         if (userInput === '' || currentImageUrl === ''){return {optimizedPrompt: userInput, endpoint: "/generate/core"};}
+
+        if (userInput.startsWith('@override')) {
+        // Extract the literal prompt after "@override" and set the endpoint
+        const literalPrompt = userInput.slice('@override'.length).trim(); // Remove "@override" and any leading spaces
+        return { optimizedPrompt: literalPrompt, endpoint: "/control/style" };
+        }
+
         chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
         const mappedMessages = mapChatMessagesToOpenAI(chatMessagesChat);
 
@@ -1127,8 +1134,10 @@ function blobToDataURL(blob: Blob): Promise<string> {
     .response .optimized-prompt {
         font-style: italic; /* Italicize for distinction */
     }
-</style>
 
+
+
+</style>
 
 <div class="parent-container">
     <!-- Existing Image Interaction Container -->
@@ -1150,7 +1159,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
                 aria-label="Upload control image (optional)"
             />
             <button on:click={callStability} disabled={is_loading}>
-                {is_loading ? 'Generating...' : 'Generate Image'}
+                {is_loading ? 'Generating...' : 'Generate'}
             </button>
         </div>
 
