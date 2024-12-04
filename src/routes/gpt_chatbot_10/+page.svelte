@@ -1,4 +1,4 @@
-<!-- Working for image context consideration -->
+<!-- Attempt to finish the prompt creation functionality started in gpt_backend_9 -->
 
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
@@ -149,7 +149,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
     }
 
     async function prepareImageMessage(userInput: string): Promise<string> {
-        if (userInput === '' || chatInput === ''){return userInput;}
+        if (userInput === '' || currentImageUrl === ''){return userInput;}
         chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
         const mappedMessages = mapChatMessagesToOpenAI(chatMessagesChat);
 
