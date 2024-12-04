@@ -63,6 +63,9 @@ function blobToDataURL(blob: Blob): Promise<string> {
         reader.readAsDataURL(blob);
     });
 }
+
+    let globalOptimizedPrompt = "";
+
     // Access the GPT API key from env variables
     const GPT_API_KEY = import.meta.env.VITE_GPT_API_KEY;
     // Chatbot states
@@ -236,8 +239,11 @@ function blobToDataURL(blob: Blob): Promise<string> {
 
             const optimizedPrompt = promptData.choices[0].message.content.trim();
             const endpoint = routingData.choices[0].message.content.trim();
+            
             console.log("optimizedPrompt: ", optimizedPrompt);
             console.log("endpoint: ", endpoint);
+
+            globalOptimizedPrompt = optimizedPrompt;
             return {optimizedPrompt, endpoint};
 
         } catch (error) {
@@ -286,11 +292,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
             formData.append("prompt", optimizedPrompt);
             formData.append("height", '1024'); // Default height for style endpoint
             formData.append("width", '1024');  // Default width for style endpoint
-
-            // Determine the endpoint based on the presence of a control image
-            // const endpoint = control_image 
-            //     ? "https://api.stability.ai/v2beta/stable-image/control/style" 
-            //     : "https://api.stability.ai/v2beta/stable-image/generate/core";
 
             if (control_image) {
                 formData.append("image", control_image);
@@ -789,29 +790,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
         --message-font-size: 1rem;
     }
 
-    /* Light Mode Overrides */
-    /* [data-theme="light"] {
-        --bg-color: #f1f1f1;
-        --text-color: #333;
-        --secondary-text-color: #555;
-        --error-color: #E74C3C;
-        --button-bg-color: #4A90E2;
-        --button-hover-color: #357ABD;
-        --button-disabled-color: #a0c4e3;
-        --undo-button-co    lor: #FF5733;
-        --undo-button-hover-color: #e04e2a;
-        --bot-bg-color: #e0e0e0;
-        --user-bg-color: #4A90E2;
-        --input-bg-color: #ffffff;
-    } */
-
-    /* Apply universal font family */
-    /* body {
-        font-family: var(--font-family);
-        background-color: var(--bg-color);
-        color: var(--text-color);
-        transition: background-color 0.3s, color 0.3s;
-    } */
     :global(html) {
         font-family: var(--font-family);
         background-color: #241d1dd1;
@@ -1132,6 +1110,23 @@ function blobToDataURL(blob: Blob): Promise<string> {
             flex-direction: column;
             align-items: flex-start;
         }
+    
+        .optimized-prompt {
+            font-size: 0.75rem;
+        }
+
+    }
+
+    .optimized-prompt {
+        font-size: 1.0rem; /* Smaller font size for fine print */
+        color: var(--secondary-text-color); /* Use secondary text color */
+        font-family: var(--font-family); /* Ensure consistent font */
+        margin-top: 10px; /* Spacing above the prompt */
+        text-align: center; /* Center align the text */
+    }
+
+    .response .optimized-prompt {
+        font-style: italic; /* Italicize for distinction */
     }
 </style>
 
@@ -1238,6 +1233,9 @@ function blobToDataURL(blob: Blob): Promise<string> {
                         on:mouseout={stopDrawing}
                     ></canvas>
                 </div>
+                {#if globalOptimizedPrompt}
+                <p class="optimized-prompt">Optimized Prompt: {globalOptimizedPrompt}</p>
+                {/if}
             </div>
         <!-- {:else if history.length > 0}
             <div class="brush-controls">
