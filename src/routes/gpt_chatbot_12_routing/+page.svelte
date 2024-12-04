@@ -1,4 +1,4 @@
-<!-- Finished prompt creation function -->
+<!-- Create model routing function -->
 
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
@@ -61,8 +61,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
         reader.readAsDataURL(blob);
     });
 }
-
-
     // Access the GPT API key from env variables
     const GPT_API_KEY = import.meta.env.VITE_GPT_API_KEY;
     // Chatbot states
@@ -139,6 +137,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
             // Add the actual description to the chat
             chatMessagesChat = [...chatMessagesChat, { user: false, text: botResponse }];
             currentImageUrl = dataUrl;
+            
         } catch (error) {
             // Replace "Analyzing image..." with an error message
             chatMessagesChat.pop();
@@ -146,20 +145,19 @@ function blobToDataURL(blob: Blob): Promise<string> {
             console.error('GPT API Error:', error);
             chatError = error instanceof Error ? error.message : 'An unknown error occurred.';
         }
+        // chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
+        // console.log("Post-model logs: ", chatMessagesChat);
     }
 
-    async function prepareImageMessage(userInput: string): Promise<string> {
-        if (userInput === '' || currentImageUrl === ''){return userInput;}
+    async function prepareImageMessage(userInput: string): Promise<{optimizedPrompt: string, endpoint: string}> {
+        if (userInput === '' || currentImageUrl === ''){return {optimizedPrompt: userInput, endpoint: "/generate/core"};}
         chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
         const mappedMessages = mapChatMessagesToOpenAI(chatMessagesChat);
 
         const messages = [
             { role: 'system', content: 'You are a helpful assistant.' },
-            ...mappedMessages,
-            { 
-                role: 'user', 
-                content: `Based on the current conversation, generate an optimized image generation prompt for the following user input: "${userInput}"` 
-            }
+            ...mappedMessages
+
         ];
 
         const imageMessage = [
@@ -170,8 +168,10 @@ function blobToDataURL(blob: Blob): Promise<string> {
                         }
                     }];
 
+        const optimizedPrompt = "";
+
         try {
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            const promptQuery = fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -179,39 +179,71 @@ function blobToDataURL(blob: Blob): Promise<string> {
                 },
                 body: JSON.stringify({
                     model: 'gpt-4o', // Corrected model name
-                    messages: [...messages, {role: 'user', content: imageMessage}],
+                    messages: [...messages, 
+                    { 
+                        role: 'user', 
+                        content: `Based on the current conversation, generate an optimized image generation prompt for the following user input. If they mention anything they drew on top of the image, try and include that in the finished prompt, even if not visible in the image itself: "${userInput}"` 
+                    },   
+                    {
+                        role: 'user', 
+                        content: imageMessage
+                    }
+                ],
+                    temperature: 0.7,
+                    max_tokens: 150,
+                    n: 1
+                })
+            });
+            const routingQuery = fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${GPT_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o', // Corrected model name
+                    messages: [...messages, 
+                    { 
+                        role: 'user', 
+                        content: `Based on the provided input, assign the most appropriate API endpoint to send this request to out of the following choices: 
+                        /control/style : extracts stylistic elements from an input image and uses it to guide the creation of an output image
+                        /control/structure : maintains the original structure of the input image, making it valuable for recreating scenes or rendering characters
+                        /control/sketch : upgrades rough hand-drawn sketches to refined outputs, or leverages existing contour lines / edges within the image
+                        /control/inpaint : modifies images by filling or replacing specified areas with new content
+                        /control/outpaint : inserts additional content into an image to fill space in any direction
+                        Respond only with the endpoint of your choice (e.g. /control/style). If the user mentions any of the keywords explicitly ('style', 'structure', 'sketch', 'inpaint', 'outpaint', favor that choice)
+                        `
+                    },   
+                ],
                     temperature: 0.7,
                     max_tokens: 150,
                     n: 1
                 })
             });
 
-            console.log("GPT response status:", response.status);
+            const [promptResponse, routingResponse] = await Promise.all([promptQuery, routingQuery]); 
+            const promptData = await promptResponse.json();
+            const routingData = await routingResponse.json();
+            console.log("promptData: ", promptData);
+            console.log("routingData: ", routingData);
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error("GPT API Error Response:", errorData);
-                throw new Error(errorData.error.message || 'Failed to generate optimized prompt from OpenAI');
-            }
-
-            const data = await response.json();
-            console.log("GPT API Response Data:", data);
-
-            if (!data.choices || !data.choices[0]?.message?.content) {
-                console.error("Unexpected response structure from OpenAI:", data);
+            if ((!promptData.choices || !promptData.choices[0]?.message?.content) || (!routingData.choices || !routingData.choices[0]?.message?.content)) {
+                // console.error("Unexpected response structure from OpenAI:", data);
                 throw new Error("Invalid response structure from OpenAI.");
             }
 
-            const optimizedPrompt = data.choices[0].message.content.trim();
-            console.log("Optimized Prompt:", optimizedPrompt);
-
-            return optimizedPrompt;
+            const optimizedPrompt = promptData.choices[0].message.content.trim();
+            const endpoint = routingData.choices[0].message.content.trim();
+            console.log("optimizedPrompt: ", optimizedPrompt);
+            console.log("endpoint2: ", endpoint);
+            return {optimizedPrompt, endpoint};
 
         } catch (error) {
             console.error('Error in prepareImageMessage:', error);
             throw error; // Re-throw to be handled by the caller
         }
-}
+
+    }
 
     // Fetch image from Stability API based on user prompt and optional control image
     async function callStability() {
@@ -227,7 +259,26 @@ function blobToDataURL(blob: Blob): Promise<string> {
 
         try {
 
-            const optimizedPrompt = await prepareImageMessage(input_value);
+            const { optimizedPrompt, endpoint } = await prepareImageMessage(input_value);
+
+            const baseURL = "https://api.stability.ai/v2beta/stable-image";
+
+            // Validate and construct the full endpoint URL
+            const validEndpoints = [
+                "/generate/core",
+                "/control/style",
+                "/control/structure",
+                "/control/sketch",
+                "/control/inpaint",
+                "/control/outpaint"
+            ];
+
+            if (!validEndpoints.includes(endpoint)) {
+            throw new Error(`Invalid endpoint received: ${endpoint}`);
+            }
+
+            const fullEndpoint = `${baseURL}${endpoint}`;
+
             // Prepare form data
             const formData = new FormData();
             formData.append("prompt", optimizedPrompt);
@@ -235,9 +286,9 @@ function blobToDataURL(blob: Blob): Promise<string> {
             formData.append("width", '1024');  // Default width for style endpoint
 
             // Determine the endpoint based on the presence of a control image
-            const endpoint = control_image 
-                ? "https://api.stability.ai/v2beta/stable-image/control/style" 
-                : "https://api.stability.ai/v2beta/stable-image/generate/core";
+            // const endpoint = control_image 
+            //     ? "https://api.stability.ai/v2beta/stable-image/control/style" 
+            //     : "https://api.stability.ai/v2beta/stable-image/generate/core";
 
             if (control_image) {
                 formData.append("image", control_image);
@@ -250,7 +301,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
                 formData.append("negative_prompt", ""); // Example of adding a negative prompt
             }
 
-            const response = await fetch(endpoint, {
+            const response = await fetch(fullEndpoint, {
                 method: "POST",
                 headers: {
                     "Authorization": `Bearer ${import.meta.env.VITE_STABILITY_KEY}`, // Stability API Key
@@ -304,7 +355,9 @@ function blobToDataURL(blob: Blob): Promise<string> {
                 }
             }
         }
-        console.log("current global messages: ", chatMessagesChat)
+        chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
+
+        // console.log("current global messages: ", chatMessagesChat)
     }
 
     // Handle image upload
@@ -449,15 +502,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
             }
         }
     }
-
-    // Handle keyboard shortcuts
-    // function handleKeyDown(event: KeyboardEvent) {
-    //     // Check for Ctrl+Z or Cmd+Z
-    //     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-    //         event.preventDefault(); // Prevent the default browser undo
-    //         undo();
-    //     }
-    // }
 
     // Set up canvas dimensions to match the image
     function setupCanvas() {
@@ -1059,8 +1103,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
     }
 </style>
 
-
-
 <div class="parent-container">
     <!-- Existing Image Interaction Container -->
     <div class="container box">
@@ -1201,4 +1243,5 @@ function blobToDataURL(blob: Blob): Promise<string> {
         </div>
     </div>
 </div>
+
 

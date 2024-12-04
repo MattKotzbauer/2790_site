@@ -1,4 +1,4 @@
-<!-- Finished prompt creation function -->
+<!-- UI Debugging -->
 
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
@@ -61,8 +61,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
         reader.readAsDataURL(blob);
     });
 }
-
-
     // Access the GPT API key from env variables
     const GPT_API_KEY = import.meta.env.VITE_GPT_API_KEY;
     // Chatbot states
@@ -139,6 +137,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
             // Add the actual description to the chat
             chatMessagesChat = [...chatMessagesChat, { user: false, text: botResponse }];
             currentImageUrl = dataUrl;
+            
         } catch (error) {
             // Replace "Analyzing image..." with an error message
             chatMessagesChat.pop();
@@ -146,6 +145,8 @@ function blobToDataURL(blob: Blob): Promise<string> {
             console.error('GPT API Error:', error);
             chatError = error instanceof Error ? error.message : 'An unknown error occurred.';
         }
+        // chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
+        // console.log("Post-model logs: ", chatMessagesChat);
     }
 
     async function prepareImageMessage(userInput: string): Promise<string> {
@@ -211,7 +212,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
             console.error('Error in prepareImageMessage:', error);
             throw error; // Re-throw to be handled by the caller
         }
-}
+    }
 
     // Fetch image from Stability API based on user prompt and optional control image
     async function callStability() {
@@ -304,7 +305,9 @@ function blobToDataURL(blob: Blob): Promise<string> {
                 }
             }
         }
-        console.log("current global messages: ", chatMessagesChat)
+        chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
+
+        // console.log("current global messages: ", chatMessagesChat)
     }
 
     // Handle image upload
@@ -449,15 +452,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
             }
         }
     }
-
-    // Handle keyboard shortcuts
-    // function handleKeyDown(event: KeyboardEvent) {
-    //     // Check for Ctrl+Z or Cmd+Z
-    //     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-    //         event.preventDefault(); // Prevent the default browser undo
-    //         undo();
-    //     }
-    // }
 
     // Set up canvas dimensions to match the image
     function setupCanvas() {
@@ -1201,4 +1195,5 @@ function blobToDataURL(blob: Blob): Promise<string> {
         </div>
     </div>
 </div>
+
 

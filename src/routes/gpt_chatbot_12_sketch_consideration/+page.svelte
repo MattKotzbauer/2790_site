@@ -1,4 +1,4 @@
-<!-- Finished prompt creation function -->
+<!-- Working consideration for sketched image upload -->
 
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
@@ -61,8 +61,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
         reader.readAsDataURL(blob);
     });
 }
-
-
     // Access the GPT API key from env variables
     const GPT_API_KEY = import.meta.env.VITE_GPT_API_KEY;
     // Chatbot states
@@ -139,6 +137,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
             // Add the actual description to the chat
             chatMessagesChat = [...chatMessagesChat, { user: false, text: botResponse }];
             currentImageUrl = dataUrl;
+            
         } catch (error) {
             // Replace "Analyzing image..." with an error message
             chatMessagesChat.pop();
@@ -146,6 +145,8 @@ function blobToDataURL(blob: Blob): Promise<string> {
             console.error('GPT API Error:', error);
             chatError = error instanceof Error ? error.message : 'An unknown error occurred.';
         }
+        // chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
+        // console.log("Post-model logs: ", chatMessagesChat);
     }
 
     async function prepareImageMessage(userInput: string): Promise<string> {
@@ -211,7 +212,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
             console.error('Error in prepareImageMessage:', error);
             throw error; // Re-throw to be handled by the caller
         }
-}
+    }
 
     // Fetch image from Stability API based on user prompt and optional control image
     async function callStability() {
@@ -304,17 +305,48 @@ function blobToDataURL(blob: Blob): Promise<string> {
                 }
             }
         }
-        console.log("current global messages: ", chatMessagesChat)
+        chatMessagesChat = chatMessagesChat.filter(message => message.text !== undefined && message.text !== null && message.text !== '');
+
+        // console.log("current global messages: ", chatMessagesChat)
     }
 
-    // Handle image upload
-    function handleImageUpload(event: Event) {
-        const target = event.target as HTMLInputElement;
-        if (target.files && target.files[0]) {
-            control_image = target.files[0];
+    // 
+    async function handleImageUpload(event: Event) {
+    const target = event.target as HTMLInputElement;
+    if (target.files && target.files[0]) {
+        control_image = target.files[0];
+
+        // Generate an object URL for the uploaded image
+        const uploadedImageUrl = URL.createObjectURL(control_image);
+
+        // Treat the uploaded image as a generated one
+        api_response = {
+            category: 'generated', // Uploaded image is treated as 'generated'
+            prompt: '{None}', // Default prompt text for uploaded images
+            image_url: uploadedImageUrl,
+            timestamp: new Date().toISOString()
+        };
+
+        // Add the uploaded image to the history
+        history = [...history, api_response];
+
+        // Clear the input prompt for refinement or new entries
+        input_value = '';
+
+        // Ensure the canvas is ready for annotations
+        if (imageElement && canvas) {
+            setupCanvas();
+        }
+
+        try {
+            // Fetch and describe the uploaded image
+            await fetchImageDescription(uploadedImageUrl);
+        } catch (error) {
+            console.error('Error describing uploaded image:', error);
         }
     }
-
+    }
+    
     // Handle feedback submission
     async function submitFeedback() {
         if (!feedback_value.trim()) {
@@ -449,15 +481,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
             }
         }
     }
-
-    // Handle keyboard shortcuts
-    // function handleKeyDown(event: KeyboardEvent) {
-    //     // Check for Ctrl+Z or Cmd+Z
-    //     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-    //         event.preventDefault(); // Prevent the default browser undo
-    //         undo();
-    //     }
-    // }
 
     // Set up canvas dimensions to match the image
     function setupCanvas() {
@@ -1085,6 +1108,27 @@ function blobToDataURL(blob: Blob): Promise<string> {
             </button>
         </div>
 
+        <!-- {#if control_image}
+        <div class="uploaded-image-container">
+            <h2>Uploaded Image Preview</h2>
+            <div class="image-container">
+                <img
+                    bind:this={imageElement}
+                    src={URL.createObjectURL(control_image)}
+                    alt="Uploaded Image"
+                    on:load={handleImageLoad}
+                />
+                <canvas
+                    bind:this={canvas}
+                    on:mousedown={startDrawing}
+                    on:mousemove={draw}
+                    on:mouseup={stopDrawing}
+                    on:mouseout={stopDrawing}
+                ></canvas>
+            </div>
+        </div>
+        {/if} -->
+
         <!-- Feedback section -->
         {#if history.length > 0}
             <div class="feedback-section">
@@ -1102,7 +1146,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
         {/if}
 
         <!-- Brush Controls and Undo Button -->
-        {#if history.length > 0}
+        <!-- {#if history.length > 0}
             <div class="brush-controls">
                 <label for="brushSize">Brush: {brushSize}px</label>
                 <input
@@ -1117,7 +1161,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
                     Undo
                 </button>
             </div>
-        {/if}
+        {/if} -->
 
         <!-- Display loading, error, or API response -->
         <!-- {#if is_loading && history.length === 0}
@@ -1142,6 +1186,21 @@ function blobToDataURL(blob: Blob): Promise<string> {
                         on:mouseout={stopDrawing}
                     ></canvas>
                 </div>
+            </div>
+        {:else if history.length > 0}
+            <div class="brush-controls">
+                <label for="brushSize">Brush: {brushSize}px</label>
+                <input
+                    type="range"
+                    id="brushSize"
+                    min="1"
+                    max="50"
+                    bind:value={brushSize}
+                    aria-label="Brush size slider"
+                />
+                <button class="undo-button" on:click={undo} disabled={undoStack.length === 0}>
+                    Undo
+                </button>
             </div>
         {/if}
 
@@ -1201,4 +1260,5 @@ function blobToDataURL(blob: Blob): Promise<string> {
         </div>
     </div>
 </div>
+
 
